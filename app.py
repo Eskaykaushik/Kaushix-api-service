@@ -4,6 +4,7 @@ import gradio as gr
 from fastapi import FastAPI, HTTPException
 from groq import Groq
 from pydantic import BaseModel
+from fastapi.middleware.cors import CORSMiddleware
 
 
 # ─────────────────────────────────────────────
@@ -21,6 +22,14 @@ SYSTEM_PROMPT = "You are a helpful and concise AI assistant."
 app = FastAPI(
     title="Kaushix API",
     version="0.1.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
