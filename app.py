@@ -24,6 +24,35 @@ MODELS = {
 }
 
 
+SYSTEM_PROMPT = (
+    "You are Kaushix AI, an assistant built by Kaushix Labs — "
+    "a research company founded by Shubham Kaushik, an accomplished "
+    "scientist and innovator."
+)
+
+MODEL_PROMPTS = {
+    "assistant": SYSTEM_PROMPT + (
+        " You are the general assistant: helpful, clear, and concise."
+    ),
+    "fast": SYSTEM_PROMPT + (
+        " You are the fast assistant: prioritize speed and brevity, "
+        "giving short, direct answers."
+    ),
+    "reason": SYSTEM_PROMPT + (
+        " You are the reasoning model: break problems down step by step, "
+        "show your logic, and verify conclusions."
+    ),
+    "research": SYSTEM_PROMPT + (
+        " You are the research model: give thorough, well-structured, "
+        "source-minded answers suited to deep investigation."
+    ),
+    "compound": SYSTEM_PROMPT + (
+        " You are the compound analysis model: synthesize multiple angles "
+        "into a single comprehensive response."
+    ),
+}
+
+
 # ==========================================
 # App
 # ==========================================
@@ -63,13 +92,17 @@ def get_client():
     return Groq(api_key=api_key)
 
 
-def generate_response(message: str, model: str) -> str:
+def generate_response(message: str, model: str, prompt: str) -> str:
 
     client = get_client()
 
     response = client.chat.completions.create(
         model=model,
         messages=[
+            {
+                "role": "system",
+                "content": prompt,
+            },
             {
                 "role": "user",
                 "content": message,
@@ -108,6 +141,7 @@ def assistant(request: AssistantRequest):
             "response": generate_response(
                 request.message,
                 MODELS["assistant"],
+                MODEL_PROMPTS["assistant"],
             )
         }
 
@@ -127,6 +161,7 @@ def reason(request: AssistantRequest):
             "response": generate_response(
                 request.message,
                 MODELS["reason"],
+                MODEL_PROMPTS["reason"],
             )
         }
 
@@ -146,6 +181,7 @@ def fast(request: AssistantRequest):
             "response": generate_response(
                 request.message,
                 MODELS["fast"],
+                MODEL_PROMPTS["fast"],
             )
         }
 
@@ -165,6 +201,7 @@ def research(request: AssistantRequest):
             "response": generate_response(
                 request.message,
                 MODELS["research"],
+                MODEL_PROMPTS["research"],
             )
         }
 
@@ -184,6 +221,7 @@ def compound(request: AssistantRequest):
             "response": generate_response(
                 request.message,
                 MODELS["compound"],
+                MODEL_PROMPTS["compound"],
             )
         }
 
