@@ -16,7 +16,7 @@ Shared FastAPI backend for Kaushix Labs and static websites. It exposes a simple
 
 ## Features
 
-- **Multiple model endpoints** — assistant, reason, fast, research, compound, and agent, each mapped to a dedicated model
+- **Multiple model endpoints** — assistant, reason, fast, research, compound, agent, and teacher, each mapped to a dedicated model
 - **FastAPI** — modern, async-ready Python framework with automatic OpenAPI docs at `/docs`
 - **CORS enabled** — ready to be called directly from any browser-based frontend
 - **Zero UI dependencies** — pure JSON API, no Gradio runtime required
@@ -33,6 +33,7 @@ Shared FastAPI backend for Kaushix Labs and static websites. It exposes a simple
 | POST   | `/api/research` | Research-oriented responses            |
 | POST   | `/api/compound` | Compound / multi-step analysis         |
 | POST   | `/api/agent`    | AI agent that mimics Shubham Kaushik  |
+| POST   | `/api/teacher`  | AI teacher for DocNest — answers AI/ML questions with history |
 | GET    | `/docs`         | Interactive Swagger UI (auto-generated) |
 
 ### Model routing
@@ -45,6 +46,10 @@ Shared FastAPI backend for Kaushix Labs and static websites. It exposes a simple
 | `/api/research` | `groq/compound-mini`    |
 | `/api/compound` | `groq/compound`         |
 | `/api/agent`    | `openai/gpt-oss-120b`   |
+| `/api/teacher`  | `openai/gpt-oss-120b`   |
+
+The teacher endpoint accepts an optional `history` array of `{role, content}`
+turns (limited to the last 20) so the chat can carry multi-turn context:
 
 ## Quickstart
 
@@ -89,6 +94,20 @@ Response:
 {
   "response": "4"
 }
+```
+
+### Teacher chat example
+
+```bash
+curl -X POST http://localhost:8000/api/teacher \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message": "How does attention work?",
+    "history": [
+      {"role": "user", "content": "What is a transformer?"},
+      {"role": "assistant", "content": "A transformer is a neural network architecture..."}
+    ]
+  }'
 ```
 
 ## Configuration
