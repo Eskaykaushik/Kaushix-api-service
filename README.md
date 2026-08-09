@@ -16,7 +16,7 @@ Shared FastAPI backend for Kaushix Labs and static websites. It exposes a simple
 
 ## Features
 
-- **Multiple model endpoints** — assistant, reason, fast, research, and compound, each mapped to a dedicated model
+- **Multiple model endpoints** — assistant, reason, fast, research, compound, and agent, each mapped to a dedicated model
 - **FastAPI** — modern, async-ready Python framework with automatic OpenAPI docs at `/docs`
 - **CORS enabled** — ready to be called directly from any browser-based frontend
 - **Zero UI dependencies** — pure JSON API, no Gradio runtime required
@@ -32,6 +32,7 @@ Shared FastAPI backend for Kaushix Labs and static websites. It exposes a simple
 | POST   | `/api/fast`     | Quick, low-latency responses           |
 | POST   | `/api/research` | Research-oriented responses            |
 | POST   | `/api/compound` | Compound / multi-step analysis         |
+| POST   | `/api/agent`    | AI agent that mimics Shubham Kaushik  |
 | GET    | `/docs`         | Interactive Swagger UI (auto-generated) |
 
 ### Model routing
@@ -43,6 +44,7 @@ Shared FastAPI backend for Kaushix Labs and static websites. It exposes a simple
 | `/api/fast`     | `openai/gpt-oss-20b`    |
 | `/api/research` | `groq/compound-mini`    |
 | `/api/compound` | `groq/compound`         |
+| `/api/agent`    | `openai/gpt-oss-120b`   |
 
 ## Quickstart
 
