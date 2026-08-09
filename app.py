@@ -1,28 +1,33 @@
 import os
 
-import gradio as gr
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from groq import Groq
 from pydantic import BaseModel
-from fastapi.middleware.cors import CORSMiddleware
 
 
-# ─────────────────────────────────────────────
+# ==========================================
 # Configuration
-# ─────────────────────────────────────────────
+# ==========================================
 
-MODEL = "llama-3.3-70b-versatile"
-SYSTEM_PROMPT = "You are a helpful and concise AI assistant."
+MODELS = {
+    "assistant": "openai/gpt-oss-20b",
+    "reason": "openai/gpt-oss-120b",
+    "fast": "openai/gpt-oss-20b",
+    "research": "groq/compound-mini",
+    "compound": "groq/compound",
+}
 
 
-# ─────────────────────────────────────────────
-# FastAPI
-# ─────────────────────────────────────────────
+# ==========================================
+# App
+# ==========================================
 
 app = FastAPI(
     title="Kaushix API",
-    version="0.1.0",
+    version="0.2.0",
 )
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -33,19 +38,19 @@ app.add_middleware(
 )
 
 
-# ─────────────────────────────────────────────
-# Schemas
-# ─────────────────────────────────────────────
+# ==========================================
+# Schema
+# ==========================================
 
 class AssistantRequest(BaseModel):
     message: str
 
 
-# ─────────────────────────────────────────────
-# LLM
-# ─────────────────────────────────────────────
+# ==========================================
+# Groq
+# ==========================================
 
-def get_client() -> Groq:
+def get_client():
     api_key = os.getenv("GROQ_API_KEY")
 
     if not api_key:
@@ -54,67 +59,128 @@ def get_client() -> Groq:
     return Groq(api_key=api_key)
 
 
-def generate_response(message: str) -> str:
+def generate_response(message: str, model: str) -> str:
+
     client = get_client()
 
     response = client.chat.completions.create(
-        model=MODEL,
+        model=model,
         messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": message},
+            {
+                "role": "user",
+                "content": message,
+            }
         ],
     )
 
     return response.choices[0].message.content or ""
 
 
-# ─────────────────────────────────────────────
+# ==========================================
 # Routes
-# ─────────────────────────────────────────────
+# ==========================================
 
 @app.get("/")
 def root():
     return {
         "name": "Kaushix API",
-        "version": "0.1.0",
+        "version": "0.2.0",
         "status": "running",
     }
 
 
 @app.get("/api/health")
 def health():
-    return {"status": "healthy"}
+    return {
+        "status": "healthy",
+    }
 
 
 @app.post("/api/assistant")
 def assistant(request: AssistantRequest):
-    try:
-        response = generate_response(request.message)
 
+    try:
         return {
-            "response": response,
+            "response": generate_response(
+                request.message,
+                MODELS["assistant"],
+            )
         }
 
-    except Exception as exc:
+    except Exception:
         raise HTTPException(
             status_code=500,
-            detail="Failed to generate response",
-        ) from exc
+            detail="Assistant request failed",
+        )
 
 
-# ─────────────────────────────────────────────
-# Gradio UI
-# ─────────────────────────────────────────────
+@app.post("/api/reason")
+def reason(request: AssistantRequest):
 
-demo = gr.Interface(
-    fn=generate_response,
-    inputs=gr.Textbox(label="Message"),
-    outputs=gr.Textbox(label="Response"),
-    title="Kaushix Assistant",
-)
+    try:
+        return {
+            "response": generate_response(
+                request.message,
+                MODELS["reason"],
+            )
+        }
 
-app = gr.mount_gradio_app(
-    app,
-    demo,
-    path="/gradio",
-)
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail="Reasoning request failed",
+        )
+
+
+@app.post("/api/fast")
+def fast(request: AssistantRequest):
+
+    try:
+        return {
+            "response": generate_response(
+                request.message,
+                MODELS["fast"],
+            )
+        }
+
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail="Fast request failed",
+        )
+
+
+@app.post("/api/research")
+def research(request: AssistantRequest):
+
+    try:
+        return {
+            "response": generate_response(
+                request.message,
+                MODELS["research"],
+            )
+        }
+
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail="Research request failed",
+        )
+
+
+@app.post("/api/compound")
+def compound(request: AssistantRequest):
+
+    try:
+        return {
+            "response": generate_response(
+                request.message,
+                MODELS["compound"],
+            )
+        }
+
+    except Exception:
+        raise HTTPException(
+            status_code=500,
+            detail="Compound request failed",
+        )
