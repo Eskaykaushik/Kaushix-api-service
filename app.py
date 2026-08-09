@@ -1,9 +1,14 @@
+import logging
 import os
 
+import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from groq import Groq
 from pydantic import BaseModel
+
+
+logger = logging.getLogger("uvicorn.error")
 
 
 # ==========================================
@@ -16,6 +21,35 @@ MODELS = {
     "fast": "openai/gpt-oss-20b",
     "research": "groq/compound-mini",
     "compound": "groq/compound",
+}
+
+
+SYSTEM_PROMPT = (
+    "You are Kaushix AI, an assistant built by Kaushix Labs — "
+    "a research company founded by Shubham Kaushik, an accomplished "
+    "scientist and innovator."
+)
+
+MODEL_PROMPTS = {
+    "assistant": SYSTEM_PROMPT + (
+        " You are the general assistant: helpful, clear, and concise."
+    ),
+    "fast": SYSTEM_PROMPT + (
+        " You are the fast assistant: prioritize speed and brevity, "
+        "giving short, direct answers."
+    ),
+    "reason": SYSTEM_PROMPT + (
+        " You are the reasoning model: break problems down step by step, "
+        "show your logic, and verify conclusions."
+    ),
+    "research": SYSTEM_PROMPT + (
+        " You are the research model: give thorough, well-structured, "
+        "source-minded answers suited to deep investigation."
+    ),
+    "compound": SYSTEM_PROMPT + (
+        " You are the compound analysis model: synthesize multiple angles "
+        "into a single comprehensive response."
+    ),
 }
 
 
@@ -32,7 +66,6 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -59,13 +92,17 @@ def get_client():
     return Groq(api_key=api_key)
 
 
-def generate_response(message: str, model: str) -> str:
+def generate_response(message: str, model: str, prompt: str) -> str:
 
     client = get_client()
 
     response = client.chat.completions.create(
         model=model,
         messages=[
+            {
+                "role": "system",
+                "content": prompt,
+            },
             {
                 "role": "user",
                 "content": message,
@@ -104,14 +141,16 @@ def assistant(request: AssistantRequest):
             "response": generate_response(
                 request.message,
                 MODELS["assistant"],
+                MODEL_PROMPTS["assistant"],
             )
         }
 
-    except Exception:
+    except Exception as exc:
+        logger.exception("Assistant request failed")
         raise HTTPException(
             status_code=500,
-            detail="Assistant request failed",
-        )
+            detail=f"Assistant request failed: {exc}",
+        ) from exc
 
 
 @app.post("/api/reason")
@@ -122,14 +161,16 @@ def reason(request: AssistantRequest):
             "response": generate_response(
                 request.message,
                 MODELS["reason"],
+                MODEL_PROMPTS["reason"],
             )
         }
 
-    except Exception:
+    except Exception as exc:
+        logger.exception("Reasoning request failed")
         raise HTTPException(
             status_code=500,
-            detail="Reasoning request failed",
-        )
+            detail=f"Reasoning request failed: {exc}",
+        ) from exc
 
 
 @app.post("/api/fast")
@@ -140,14 +181,16 @@ def fast(request: AssistantRequest):
             "response": generate_response(
                 request.message,
                 MODELS["fast"],
+                MODEL_PROMPTS["fast"],
             )
         }
 
-    except Exception:
+    except Exception as exc:
+        logger.exception("Fast request failed")
         raise HTTPException(
             status_code=500,
-            detail="Fast request failed",
-        )
+            detail=f"Fast request failed: {exc}",
+        ) from exc
 
 
 @app.post("/api/research")
@@ -158,14 +201,16 @@ def research(request: AssistantRequest):
             "response": generate_response(
                 request.message,
                 MODELS["research"],
+                MODEL_PROMPTS["research"],
             )
         }
 
-    except Exception:
+    except Exception as exc:
+        logger.exception("Research request failed")
         raise HTTPException(
             status_code=500,
-            detail="Research request failed",
-        )
+            detail=f"Research request failed: {exc}",
+        ) from exc
 
 
 @app.post("/api/compound")
@@ -176,11 +221,18 @@ def compound(request: AssistantRequest):
             "response": generate_response(
                 request.message,
                 MODELS["compound"],
+                MODEL_PROMPTS["compound"],
             )
         }
 
-    except Exception:
+    except Exception as exc:
+        logger.exception("Compound request failed")
         raise HTTPException(
             status_code=500,
-            detail="Compound request failed",
-        )
+            detail=f"Compound request failed: {exc}",
+        ) from exc
+
+
+if __name__ == "__main__":
+    port = int(os.getenv("PORT", 8000))
+    uvicorn.run("app:app", host="0.0.0.0", port=port)
