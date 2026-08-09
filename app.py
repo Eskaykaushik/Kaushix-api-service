@@ -1,9 +1,14 @@
+import logging
 import os
 
+import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from groq import Groq
 from pydantic import BaseModel
+
+
+logger = logging.getLogger("uvicorn.error")
 
 
 # ==========================================
@@ -32,7 +37,6 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -107,11 +111,12 @@ def assistant(request: AssistantRequest):
             )
         }
 
-    except Exception:
+    except Exception as exc:
+        logger.exception("Assistant request failed")
         raise HTTPException(
             status_code=500,
-            detail="Assistant request failed",
-        )
+            detail=f"Assistant request failed: {exc}",
+        ) from exc
 
 
 @app.post("/api/reason")
@@ -125,11 +130,12 @@ def reason(request: AssistantRequest):
             )
         }
 
-    except Exception:
+    except Exception as exc:
+        logger.exception("Reasoning request failed")
         raise HTTPException(
             status_code=500,
-            detail="Reasoning request failed",
-        )
+            detail=f"Reasoning request failed: {exc}",
+        ) from exc
 
 
 @app.post("/api/fast")
@@ -143,11 +149,12 @@ def fast(request: AssistantRequest):
             )
         }
 
-    except Exception:
+    except Exception as exc:
+        logger.exception("Fast request failed")
         raise HTTPException(
             status_code=500,
-            detail="Fast request failed",
-        )
+            detail=f"Fast request failed: {exc}",
+        ) from exc
 
 
 @app.post("/api/research")
@@ -161,11 +168,12 @@ def research(request: AssistantRequest):
             )
         }
 
-    except Exception:
+    except Exception as exc:
+        logger.exception("Research request failed")
         raise HTTPException(
             status_code=500,
-            detail="Research request failed",
-        )
+            detail=f"Research request failed: {exc}",
+        ) from exc
 
 
 @app.post("/api/compound")
@@ -179,8 +187,14 @@ def compound(request: AssistantRequest):
             )
         }
 
-    except Exception:
+    except Exception as exc:
+        logger.exception("Compound request failed")
         raise HTTPException(
             status_code=500,
-            detail="Compound request failed",
-        )
+            detail=f"Compound request failed: {exc}",
+        ) from exc
+
+
+if __name__ == "__main__":
+    port = int(os.getenv("PORT", 8000))
+    uvicorn.run("app:app", host="0.0.0.0", port=port)
