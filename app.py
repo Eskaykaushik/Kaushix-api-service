@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import re
 
 import uvicorn
 from fastapi import FastAPI, HTTPException
@@ -402,6 +403,48 @@ class TeacherRequest(BaseModel):
 # Groq
 # ==========================================
 
+_THINK_BLOCK = re.compile(r"^\s*<think>.*?</think>\s*", re.DOTALL)
+
+
+def strip_think_block(content: str) -> str:
+
+    return _THINK_BLOCK.sub("", content, count=1)
+
+
+def strip_think_stream(content: str):
+
+    if not hasattr(strip_think_stream, "buffer"):
+        strip_think_stream.buffer = ""
+        strip_think_stream.passthrough = False
+
+    if strip_think_stream.passthrough:
+        if content:
+            yield content
+        return
+
+    strip_think_stream.buffer += content
+
+    stripped = strip_think_stream.buffer.lstrip()
+
+    if not stripped.startswith("<think>"):
+        if strip_think_stream.buffer:
+            yield strip_think_stream.buffer
+        strip_think_stream.passthrough = True
+        return
+
+    end = stripped.find("</think>")
+
+    if end == -1:
+        return
+
+    remainder = stripped[end + len("</think>"):].lstrip()
+
+    if remainder:
+        yield remainder
+
+    strip_think_stream.passthrough = True
+
+
 def get_client():
     api_key = os.getenv("GROQ_API_KEY")
 
@@ -450,7 +493,7 @@ def generate_chat_response(
         max_tokens=params.get("max_tokens", 2048),
     )
 
-    return response.choices[0].message.content or ""
+    return strip_think_block(response.choices[0].message.content or "")
 
 
 def stream_chat_response(
@@ -480,7 +523,8 @@ def stream_chat_response(
                 continue
             delta = chunk.choices[0].delta
             if delta and delta.content:
-                yield f"data: {json.dumps({'content': delta.content})}\n\n"
+                for piece in strip_think_stream(delta.content):
+                    yield f"data: {json.dumps({'content': piece})}\n\n"
 
         yield "data: [DONE]\n\n"
 
