@@ -23,10 +23,10 @@ MODELS = {
     "fast": "llama-3.1-8b-instant",
     "research": "groq/compound-mini",
     "compound": "groq/compound",
-    "agent": "qwen/qwen3-32b",
+    "agent": "qwen/qwen3.6-27b",
     "teacher": "llama-3.3-70b-versatile",
-    "coder": "deepseek-r1-distill-llama-70b",
-    "poet": "gemma2-9b-it",
+    "coder": "llama-3.3-70b-versatile",
+    "poet": "openai/gpt-oss-20b",
 }
 
 MODEL_PARAMS = {
