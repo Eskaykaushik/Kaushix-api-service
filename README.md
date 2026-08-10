@@ -34,6 +34,8 @@ Shared FastAPI backend for Kaushix Labs and static websites. It exposes a simple
 | POST   | `/api/compound` | Compound / multi-step analysis         |
 | POST   | `/api/agent`    | AI agent that mimics Shubham Kaushik  |
 | POST   | `/api/teacher`  | AI teacher for DocNest — answers AI/ML questions with history |
+| POST   | `/api/coder`    | Code writing, review, and debugging   |
+| POST   | `/api/poet`     | Creative writing — poems, stories, copy |
 | GET    | `/docs`         | Interactive Swagger UI (auto-generated) |
 
 ### Model routing
@@ -47,6 +49,8 @@ Shared FastAPI backend for Kaushix Labs and static websites. It exposes a simple
 | `/api/compound` | `groq/compound`         |
 | `/api/agent`    | `qwen/qwen3-32b`        |
 | `/api/teacher`  | `llama-3.3-70b-versatile` |
+| `/api/coder`    | `deepseek-r1-distill-llama-70b` |
+| `/api/poet`     | `gemma2-9b-it`          |
 
 ### Streaming
 
