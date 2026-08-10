@@ -285,7 +285,7 @@ MODEL_PROMPTS = {
 
 app = FastAPI(
     title="Kaushix API",
-    version="0.3.0",
+    version="0.4.0",
 )
 
 
@@ -301,13 +301,14 @@ app.add_middleware(
 # Schema
 # ==========================================
 
-class AssistantRequest(BaseModel):
-    message: str
-
-
 class ChatMessage(BaseModel):
     role: str
     content: str
+
+
+class AssistantRequest(BaseModel):
+    message: str
+    history: list[ChatMessage] = []
 
 
 class TeacherRequest(BaseModel):
@@ -326,27 +327,6 @@ def get_client():
         raise RuntimeError("GROQ_API_KEY is not configured")
 
     return Groq(api_key=api_key)
-
-
-def generate_response(message: str, model: str, prompt: str) -> str:
-
-    client = get_client()
-
-    response = client.chat.completions.create(
-        model=model,
-        messages=[
-            {
-                "role": "system",
-                "content": prompt,
-            },
-            {
-                "role": "user",
-                "content": message,
-            }
-        ],
-    )
-
-    return response.choices[0].message.content or ""
 
 
 def generate_chat_response(
@@ -381,7 +361,7 @@ def generate_chat_response(
 def root():
     return {
         "name": "Kaushix API",
-        "version": "0.3.0",
+        "version": "0.4.0",
         "status": "running",
     }
 
@@ -398,10 +378,11 @@ def assistant(request: AssistantRequest):
 
     try:
         return {
-            "response": generate_response(
+            "response": generate_chat_response(
                 request.message,
                 MODELS["assistant"],
                 MODEL_PROMPTS["assistant"],
+                [turn.model_dump() for turn in request.history],
             )
         }
 
@@ -418,10 +399,11 @@ def reason(request: AssistantRequest):
 
     try:
         return {
-            "response": generate_response(
+            "response": generate_chat_response(
                 request.message,
                 MODELS["reason"],
                 MODEL_PROMPTS["reason"],
+                [turn.model_dump() for turn in request.history],
             )
         }
 
@@ -438,10 +420,11 @@ def fast(request: AssistantRequest):
 
     try:
         return {
-            "response": generate_response(
+            "response": generate_chat_response(
                 request.message,
                 MODELS["fast"],
                 MODEL_PROMPTS["fast"],
+                [turn.model_dump() for turn in request.history],
             )
         }
 
@@ -458,10 +441,11 @@ def research(request: AssistantRequest):
 
     try:
         return {
-            "response": generate_response(
+            "response": generate_chat_response(
                 request.message,
                 MODELS["research"],
                 MODEL_PROMPTS["research"],
+                [turn.model_dump() for turn in request.history],
             )
         }
 
@@ -478,10 +462,11 @@ def compound(request: AssistantRequest):
 
     try:
         return {
-            "response": generate_response(
+            "response": generate_chat_response(
                 request.message,
                 MODELS["compound"],
                 MODEL_PROMPTS["compound"],
+                [turn.model_dump() for turn in request.history],
             )
         }
 
@@ -498,10 +483,11 @@ def agent(request: AssistantRequest):
 
     try:
         return {
-            "response": generate_response(
+            "response": generate_chat_response(
                 request.message,
                 MODELS["agent"],
                 MODEL_PROMPTS["agent"],
+                [turn.model_dump() for turn in request.history],
             )
         }
 
