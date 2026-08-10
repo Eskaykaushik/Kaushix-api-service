@@ -411,38 +411,53 @@ def strip_think_block(content: str) -> str:
     return _THINK_BLOCK.sub("", content, count=1)
 
 
-def strip_think_stream(content: str):
+def make_think_stripper():
 
-    if not hasattr(strip_think_stream, "buffer"):
-        strip_think_stream.buffer = ""
-        strip_think_stream.passthrough = False
+    buffer = ""
+    passthrough = False
+    leading = True
 
-    if strip_think_stream.passthrough:
-        if content:
-            yield content
-        return
+    def process(content: str) -> list[str]:
 
-    strip_think_stream.buffer += content
+        nonlocal buffer, passthrough, leading
 
-    stripped = strip_think_stream.buffer.lstrip()
+        pieces: list[str] = []
 
-    if not stripped.startswith("<think>"):
-        if strip_think_stream.buffer:
-            yield strip_think_stream.buffer
-        strip_think_stream.passthrough = True
-        return
+        if passthrough:
+            if content:
+                piece = content.lstrip() if leading else content
+                leading = False
+                if piece:
+                    pieces.append(piece)
+            return pieces
 
-    end = stripped.find("</think>")
+        buffer += content
 
-    if end == -1:
-        return
+        stripped = buffer.lstrip()
 
-    remainder = stripped[end + len("</think>"):].lstrip()
+        if not stripped.startswith("<think>"):
+            passthrough = True
+            if stripped:
+                leading = False
+                pieces.append(stripped)
+            return pieces
 
-    if remainder:
-        yield remainder
+        end = stripped.find("</think>")
 
-    strip_think_stream.passthrough = True
+        if end == -1:
+            return pieces
+
+        remainder = stripped[end + len("</think>"):].lstrip()
+
+        passthrough = True
+
+        if remainder:
+            leading = False
+            pieces.append(remainder)
+
+        return pieces
+
+    return process
 
 
 def get_client():
@@ -518,12 +533,14 @@ def stream_chat_response(
             stream=True,
         )
 
+        stripper = make_think_stripper()
+
         for chunk in stream:
             if not chunk.choices:
                 continue
             delta = chunk.choices[0].delta
             if delta and delta.content:
-                for piece in strip_think_stream(delta.content):
+                for piece in stripper(delta.content):
                     yield f"data: {json.dumps({'content': piece})}\n\n"
 
         yield "data: [DONE]\n\n"
