@@ -1,9 +1,11 @@
+import json
 import logging
 import os
 
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from groq import Groq
 from pydantic import BaseModel
 
@@ -18,11 +20,21 @@ logger = logging.getLogger("uvicorn.error")
 MODELS = {
     "assistant": "openai/gpt-oss-20b",
     "reason": "openai/gpt-oss-120b",
-    "fast": "openai/gpt-oss-20b",
+    "fast": "llama-3.1-8b-instant",
     "research": "groq/compound-mini",
     "compound": "groq/compound",
-    "agent": "openai/gpt-oss-120b",
-    "teacher": "openai/gpt-oss-120b",
+    "agent": "qwen/qwen3-32b",
+    "teacher": "llama-3.3-70b-versatile",
+}
+
+MODEL_PARAMS = {
+    "assistant": {"temperature": 0.7, "max_tokens": 2048},
+    "reason": {"temperature": 0.3, "max_tokens": 4096},
+    "fast": {"temperature": 0.4, "max_tokens": 512},
+    "research": {"temperature": 0.6, "max_tokens": 4096},
+    "compound": {"temperature": 0.5, "max_tokens": 4096},
+    "agent": {"temperature": 0.7, "max_tokens": 2048},
+    "teacher": {"temperature": 0.6, "max_tokens": 4096},
 }
 
 
@@ -329,14 +341,11 @@ def get_client():
     return Groq(api_key=api_key)
 
 
-def generate_chat_response(
+def build_messages(
     message: str,
-    model: str,
     prompt: str,
     history: list[dict] | None = None,
-) -> str:
-
-    client = get_client()
+) -> list[dict]:
 
     messages = [{"role": "system", "content": prompt}]
 
@@ -348,14 +357,87 @@ def generate_chat_response(
 
     messages.append({"role": "user", "content": message})
 
-    response = client.chat.completions.create(model=model, messages=messages)
+    return messages
+
+
+def generate_chat_response(
+    message: str,
+    model_key: str,
+    history: list[dict] | None = None,
+) -> str:
+
+    client = get_client()
+
+    messages = build_messages(message, MODEL_PROMPTS[model_key], history)
+
+    model = MODELS[model_key]
+    params = MODEL_PARAMS.get(model_key, {})
+
+    response = client.chat.completions.create(
+        model=model,
+        messages=messages,
+        temperature=params.get("temperature", 0.7),
+        max_tokens=params.get("max_tokens", 2048),
+    )
 
     return response.choices[0].message.content or ""
+
+
+def stream_chat_response(
+    message: str,
+    model_key: str,
+    history: list[dict] | None = None,
+):
+
+    client = get_client()
+
+    messages = build_messages(message, MODEL_PROMPTS[model_key], history)
+
+    model = MODELS[model_key]
+    params = MODEL_PARAMS.get(model_key, {})
+
+    try:
+        stream = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            temperature=params.get("temperature", 0.7),
+            max_tokens=params.get("max_tokens", 2048),
+            stream=True,
+        )
+
+        for chunk in stream:
+            if not chunk.choices:
+                continue
+            delta = chunk.choices[0].delta
+            if delta and delta.content:
+                yield f"data: {json.dumps({'content': delta.content})}\n\n"
+
+        yield "data: [DONE]\n\n"
+
+    except Exception as exc:
+        logger.exception("Streaming request failed")
+        yield f"data: {json.dumps({'error': str(exc)})}\n\n"
 
 
 # ==========================================
 # Routes
 # ==========================================
+
+def chat_response(model_key: str, request: AssistantRequest, stream: bool):
+
+    history = [turn.model_dump() for turn in request.history]
+
+    if stream:
+        return StreamingResponse(
+            stream_chat_response(request.message, model_key, history),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache"},
+        )
+
+    return {
+        "response": generate_chat_response(request.message, model_key, history)
+    }
+
 
 @app.get("/")
 def root():
@@ -374,17 +456,10 @@ def health():
 
 
 @app.post("/api/assistant")
-def assistant(request: AssistantRequest):
+def assistant(request: AssistantRequest, stream: bool = False):
 
     try:
-        return {
-            "response": generate_chat_response(
-                request.message,
-                MODELS["assistant"],
-                MODEL_PROMPTS["assistant"],
-                [turn.model_dump() for turn in request.history],
-            )
-        }
+        return chat_response("assistant", request, stream)
 
     except Exception as exc:
         logger.exception("Assistant request failed")
@@ -395,17 +470,10 @@ def assistant(request: AssistantRequest):
 
 
 @app.post("/api/reason")
-def reason(request: AssistantRequest):
+def reason(request: AssistantRequest, stream: bool = False):
 
     try:
-        return {
-            "response": generate_chat_response(
-                request.message,
-                MODELS["reason"],
-                MODEL_PROMPTS["reason"],
-                [turn.model_dump() for turn in request.history],
-            )
-        }
+        return chat_response("reason", request, stream)
 
     except Exception as exc:
         logger.exception("Reasoning request failed")
@@ -416,17 +484,10 @@ def reason(request: AssistantRequest):
 
 
 @app.post("/api/fast")
-def fast(request: AssistantRequest):
+def fast(request: AssistantRequest, stream: bool = False):
 
     try:
-        return {
-            "response": generate_chat_response(
-                request.message,
-                MODELS["fast"],
-                MODEL_PROMPTS["fast"],
-                [turn.model_dump() for turn in request.history],
-            )
-        }
+        return chat_response("fast", request, stream)
 
     except Exception as exc:
         logger.exception("Fast request failed")
@@ -437,17 +498,10 @@ def fast(request: AssistantRequest):
 
 
 @app.post("/api/research")
-def research(request: AssistantRequest):
+def research(request: AssistantRequest, stream: bool = False):
 
     try:
-        return {
-            "response": generate_chat_response(
-                request.message,
-                MODELS["research"],
-                MODEL_PROMPTS["research"],
-                [turn.model_dump() for turn in request.history],
-            )
-        }
+        return chat_response("research", request, stream)
 
     except Exception as exc:
         logger.exception("Research request failed")
@@ -458,17 +512,10 @@ def research(request: AssistantRequest):
 
 
 @app.post("/api/compound")
-def compound(request: AssistantRequest):
+def compound(request: AssistantRequest, stream: bool = False):
 
     try:
-        return {
-            "response": generate_chat_response(
-                request.message,
-                MODELS["compound"],
-                MODEL_PROMPTS["compound"],
-                [turn.model_dump() for turn in request.history],
-            )
-        }
+        return chat_response("compound", request, stream)
 
     except Exception as exc:
         logger.exception("Compound request failed")
@@ -479,17 +526,10 @@ def compound(request: AssistantRequest):
 
 
 @app.post("/api/agent")
-def agent(request: AssistantRequest):
+def agent(request: AssistantRequest, stream: bool = False):
 
     try:
-        return {
-            "response": generate_chat_response(
-                request.message,
-                MODELS["agent"],
-                MODEL_PROMPTS["agent"],
-                [turn.model_dump() for turn in request.history],
-            )
-        }
+        return chat_response("agent", request, stream)
 
     except Exception as exc:
         logger.exception("Agent request failed")
@@ -500,17 +540,10 @@ def agent(request: AssistantRequest):
 
 
 @app.post("/api/teacher")
-def teacher(request: TeacherRequest):
+def teacher(request: TeacherRequest, stream: bool = False):
 
     try:
-        return {
-            "response": generate_chat_response(
-                request.message,
-                MODELS["teacher"],
-                MODEL_PROMPTS["teacher"],
-                [turn.model_dump() for turn in request.history],
-            )
-        }
+        return chat_response("teacher", request, stream)
 
     except Exception as exc:
         logger.exception("Teacher request failed")

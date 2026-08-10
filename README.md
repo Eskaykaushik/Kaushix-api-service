@@ -42,11 +42,25 @@ Shared FastAPI backend for Kaushix Labs and static websites. It exposes a simple
 | --------------- | ----------------------- |
 | `/api/assistant`| `openai/gpt-oss-20b`    |
 | `/api/reason`   | `openai/gpt-oss-120b`   |
-| `/api/fast`     | `openai/gpt-oss-20b`    |
+| `/api/fast`     | `llama-3.1-8b-instant`  |
 | `/api/research` | `groq/compound-mini`    |
 | `/api/compound` | `groq/compound`         |
-| `/api/agent`    | `openai/gpt-oss-120b`   |
-| `/api/teacher`  | `openai/gpt-oss-120b`   |
+| `/api/agent`    | `qwen/qwen3-32b`        |
+| `/api/teacher`  | `llama-3.3-70b-versatile` |
+
+### Streaming
+
+Append `?stream=1` to any endpoint to receive a server-sent events
+stream instead of a JSON body:
+
+```bash
+curl -X POST "http://localhost:8000/api/assistant?stream=1" \
+  -H "Content-Type: application/json" \
+  -d '{"message": "What is 2 + 2?"}'
+```
+
+Each frame is `data: {"content": "<delta>"}` and the stream ends with
+`data: [DONE]`. Errors mid-stream are sent as `data: {"error": "..."}`.
 
 The teacher endpoint accepts an optional `history` array of `{role, content}`
 turns (limited to the last 20) so the chat can carry multi-turn context:
