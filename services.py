@@ -259,10 +259,11 @@ def _chat_with_retry(client, model, messages, temperature, max_tokens, tools=Non
 
 
 def _complete_with_tools(client, agent_name, message, history, spec):
-    """Run an agent that may invoke tools (e.g. send_order_email).
+    """Run an agent that may invoke tools (e.g. add_to_cart, send_order_email).
 
-    Tries the primary model with tool calling first. On hard failure,
-    falls back to non-tool models for degraded chat (no ordering).
+    Returns a dict ``{"response": str, "tool_calls": list}`` where
+    *tool_calls* lists every tool the agent invoked (name + arguments).
+    On hard failure, falls back to non-tool models for degraded chat.
     """
     temperature = spec["temperature"]
     max_tokens = spec["max_tokens"]
@@ -272,6 +273,7 @@ def _complete_with_tools(client, agent_name, message, history, spec):
 
     messages = build_messages(message, agent_name, history)
 
+    executed_tools: list[dict] = []
     last_error = None
     for model in models:
         try:
@@ -280,7 +282,7 @@ def _complete_with_tools(client, agent_name, message, history, spec):
             tool_calls = getattr(msg, "tool_calls", None)
 
             if not tool_calls:
-                return strip_think_block(msg.content or "")
+                return {"response": strip_think_block(msg.content or ""), "tool_calls": executed_tools}
 
             messages.append({
                 "role": "assistant",
@@ -308,15 +310,20 @@ def _complete_with_tools(client, agent_name, message, history, spec):
                     result = run_tool(name, args)
                 except Exception as exc:  # noqa: BLE001
                     logger.exception("Tool %s failed", name)
-                    result = {"status": "error", "message": str(exc)}
+                    result = json.dumps({"status": "error", "message": str(exc)})
                 messages.append({
                     "role": "tool",
                     "tool_call_id": tc.id,
                     "content": result if isinstance(result, str) else json.dumps(result),
                 })
+                executed_tools.append({
+                    "name": name,
+                    "arguments": args,
+                    "result": json.loads(result) if isinstance(result, str) else result,
+                })
 
             final = _chat_with_retry(client, model, messages, temperature, max_tokens, None)
-            return strip_think_block(final.choices[0].message.content or "")
+            return {"response": strip_think_block(final.choices[0].message.content or ""), "tool_calls": executed_tools}
 
         except Exception as exc:
             last_error = exc
@@ -330,7 +337,7 @@ def generate_chat_response(
     message: str,
     agent_name: str,
     history: list[dict] | None = None,
-) -> str:
+) -> str | dict:
 
     spec = AGENTS.get(agent_name)
 
