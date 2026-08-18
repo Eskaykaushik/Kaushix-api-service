@@ -4,7 +4,7 @@ from agents._base import SYSTEM_PROMPT
 from tools.email import send_order_email
 
 PROVIDER = "groq"
-MODEL = "llama-3.3-70b-versatile"
+MODEL = "qwen/qwen3.6-27b"
 TEMPERATURE = 0.4
 MAX_TOKENS = 1024
 FALLBACKS = ["assistant", "fast"]
