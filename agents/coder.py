@@ -1,7 +1,7 @@
 from agents._base import SYSTEM_PROMPT
 
 PROVIDER = "groq"
-MODEL = "llama-3.3-70b-versatile"
+MODEL = "qwen/qwen3.6-27b"
 TEMPERATURE = 0.3
 MAX_TOKENS = 4096
 FALLBACKS = ["assistant", "fast"]
