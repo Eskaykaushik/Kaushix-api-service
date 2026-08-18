@@ -4,3 +4,4 @@ gradio
 groq
 pytest
 httpx
+python-dotenv

@@ -1,12 +1,15 @@
 import os
 
 import uvicorn
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from agents import AGENTS, MODEL_PROMPTS, MODELS
 from routes import build_chat_router
 from services import generate_chat_response, get_client, stream_chat_response
+
+load_dotenv()
 
 
 app = FastAPI(
