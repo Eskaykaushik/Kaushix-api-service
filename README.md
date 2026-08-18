@@ -36,6 +36,7 @@ Shared FastAPI backend for Kaushix Labs and static websites. It exposes a simple
 | POST   | `/api/teacher`  | AI teacher for DocNest — answers AI/ML questions with history |
 | POST   | `/api/coder`    | Code writing, review, and debugging   |
 | POST   | `/api/poet`     | Creative writing — poems, stories, copy |
+| POST   | `/api/electrosemi` | ElectroSemi sales agent; can email the team a submitted order via the `send_order_email` tool |
 | GET    | `/docs`         | Interactive Swagger UI (auto-generated) |
 
 ### Model routing
@@ -130,11 +131,29 @@ curl -X POST http://localhost:8000/api/teacher \
 
 ## Configuration
 
-| Variable        | Required | Description       |
-| --------------- | -------- | ----------------- |
-| `GROQ_API_KEY`  | Yes      | Groq API key      |
+| Variable           | Required | Description                                          |
+| ------------------ | -------- | ---------------------------------------------------- |
+| `GROQ_API_KEY`     | Yes      | Groq API key                                         |
+| `RESEND_API_KEY`   | For `/api/electrosemi` | Resend API key for order emails           |
+| `RESEND_FROM`      | No       | Sender address (default `onboarding@resend.dev`)      |
+| `SALES_TEAM_EMAIL` | For `/api/electrosemi` | Recipient(s), comma-separated, for order emails |
 
 The model mapping is defined in the `MODELS` dictionary in `app.py`.
+
+## ElectroSemi agent
+
+`/api/electrosemi` is a sales agent for the ElectroSemi conversational
+commerce frontend. It converses with customers and, when an order is
+submitted, calls the **`send_order_email`** tool. That tool composes an
+HTML/text email from the structured order and sends it via
+[Resend](https://resend.com) to `SALES_TEAM_EMAIL`.
+
+It is a tool-enabled agent: `services.generate_chat_response` detects agents
+that declare `TOOLS` + `run_tool` and runs a tool-calling loop (model emits
+`tool_calls` → tool executes → result fed back → final reply). Agents without
+tools are unaffected.
+
+Required env vars for this agent: `RESEND_API_KEY`, `SALES_TEAM_EMAIL`.
 
 ## Testing
 

@@ -219,11 +219,96 @@ def _complete(
     raise last_error or RuntimeError("Agent request failed")
 
 
+def _chat(client, model, messages, temperature, max_tokens, tools):
+    """Single chat completion with transient-retry, optional tools."""
+    kwargs = {
+        "model": model,
+        "messages": messages,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+    }
+    if tools is not None:
+        kwargs["tools"] = tools
+
+    last_error: Exception | None = None
+    for attempt in range(1, TRANSIENT_RETRIES + 1):
+        try:
+            return client.chat.completions.create(**kwargs)
+        except _TRANSIENT_ERRORS as exc:
+            last_error = exc
+            logger.warning(
+                "Transient error in tool-agent call (attempt %s): %s", attempt, exc
+            )
+            if attempt < TRANSIENT_RETRIES:
+                _sleep(BASE_BACKOFF * (2 ** attempt))
+    raise last_error or RuntimeError("Tool-agent call failed")
+
+
+def _complete_with_tools(client, agent_name, message, history, spec):
+    """Run an agent that may invoke tools (e.g. send_order_email)."""
+    temperature = spec["temperature"]
+    max_tokens = spec["max_tokens"]
+    tools = spec["tools"]
+    run_tool = spec["run_tool"]
+    model = spec["model"]
+
+    messages = build_messages(message, agent_name, history)
+
+    response = _chat(client, model, messages, temperature, max_tokens, tools)
+    msg = response.choices[0].message
+    tool_calls = getattr(msg, "tool_calls", None)
+
+    if not tool_calls:
+        return strip_think_block(msg.content or "")
+
+    messages.append({
+        "role": "assistant",
+        "content": msg.content or "",
+        "tool_calls": [
+            {
+                "id": tc.id,
+                "type": tc.type,
+                "function": {
+                    "name": tc.function.name,
+                    "arguments": tc.function.arguments,
+                },
+            }
+            for tc in tool_calls
+        ],
+    })
+
+    for tc in tool_calls:
+        name = tc.function.name
+        try:
+            args = json.loads(tc.function.arguments or "{}")
+        except json.JSONDecodeError:
+            args = {}
+        try:
+            result = run_tool(name, args)
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("Tool %s failed", name)
+            result = {"status": "error", "message": str(exc)}
+        messages.append({
+            "role": "tool",
+            "tool_call_id": tc.id,
+            "content": result if isinstance(result, str) else json.dumps(result),
+        })
+
+    final = _chat(client, model, messages, temperature, max_tokens, None)
+    return strip_think_block(final.choices[0].message.content or "")
+
+
 def generate_chat_response(
     message: str,
     agent_name: str,
     history: list[dict] | None = None,
 ) -> str:
+
+    spec = AGENTS.get(agent_name)
+
+    if spec and spec.get("tools") and spec.get("run_tool"):
+        client = get_client()
+        return _complete_with_tools(client, agent_name, message, history, spec)
 
     client = get_client()
 

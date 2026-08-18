@@ -23,6 +23,8 @@ def _discover() -> dict[str, dict]:
             "label": getattr(module, "LABEL", module_info.name.capitalize()),
             "fallbacks": getattr(module, "FALLBACKS", []),
             "provider": getattr(module, "PROVIDER", DEFAULT_PROVIDER),
+            "tools": getattr(module, "TOOLS", None),
+            "run_tool": getattr(module, "run_tool", None),
         }
 
     return agents
