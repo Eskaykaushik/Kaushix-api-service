@@ -26,11 +26,17 @@ def build_chat_router(agents: dict[str, dict]) -> APIRouter:
             )
 
         try:
-            return {
-                "response": services.generate_chat_response(
-                    request.message, agent_name, history
-                )
-            }
+            result = services.generate_chat_response(
+                request.message, agent_name, history
+            )
+
+            if isinstance(result, dict):
+                return {
+                    "response": result.get("response", ""),
+                    "tool_calls": result.get("tool_calls", []),
+                }
+
+            return {"response": result}
 
         except Exception as exc:
             label = agents[agent_name]["label"]
