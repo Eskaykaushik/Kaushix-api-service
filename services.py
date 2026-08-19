@@ -13,7 +13,7 @@ from agents import AGENTS
 logger = logging.getLogger("uvicorn.error")
 
 
-_THINK_BLOCK = re.compile(r"^\s*<think>.*?</think>\s*", re.DOTALL)
+_THINK_BLOCK = re.compile(r"<think>.*?</think>", re.DOTALL)
 
 _client: Groq | None = None
 
@@ -32,7 +32,7 @@ _TRANSIENT_ERRORS = (
 
 def strip_think_block(content: str) -> str:
 
-    return _THINK_BLOCK.sub("", content, count=1)
+    return _THINK_BLOCK.sub("", content)
 
 
 def make_think_stripper():
