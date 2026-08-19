@@ -1,4 +1,5 @@
 import os
+import threading
 
 import uvicorn
 from dotenv import load_dotenv
@@ -7,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from agents import AGENTS, MODEL_PROMPTS, MODELS
 from routes import build_chat_router
-from services import generate_chat_response, get_client, stream_chat_response
+from services import generate_chat_response, get_client, stream_chat_response, warmup
 
 load_dotenv()
 
@@ -27,6 +28,11 @@ app.add_middleware(
 
 
 app.include_router(build_chat_router(AGENTS))
+
+
+@app.on_event("startup")
+def on_startup():
+    threading.Thread(target=warmup, daemon=True).start()
 
 
 @app.get("/")
