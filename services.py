@@ -1,8 +1,12 @@
+import hashlib
 import json
 import logging
 import os
 import re
+import threading
+from collections import OrderedDict
 from time import sleep as _sleep
+from time import time as _now
 
 from groq import Groq
 
@@ -22,12 +26,46 @@ BASE_BACKOFF = 0.25
 MIN_MAX_TOKENS = 128
 MAX_HISTORY_TURNS = 20
 
+CACHE_TTL = 300
+CACHE_MAX = 200
+_response_cache: OrderedDict[str, tuple[float, dict | str]] = OrderedDict()
+_cache_lock = threading.Lock()
+
 _TRANSIENT_ERRORS = (
     groq.RateLimitError,
     groq.APITimeoutError,
     groq.APIConnectionError,
     groq.InternalServerError,
 )
+
+
+# ---------- response cache ----------
+def _cache_key(message: str, agent_name: str) -> str:
+    raw = message.strip().lower() + "|" + agent_name
+    return hashlib.sha256(raw.encode()).hexdigest()[:32]
+
+
+def _cache_get(message: str, agent_name: str):
+    key = _cache_key(message, agent_name)
+    with _cache_lock:
+        entry = _response_cache.get(key)
+        if entry is None:
+            return None
+        ts, value = entry
+        if _now() - ts > CACHE_TTL:
+            _response_cache.pop(key, None)
+            return None
+        _response_cache.move_to_end(key)
+        return value
+
+
+def _cache_put(message: str, agent_name: str, value):
+    key = _cache_key(message, agent_name)
+    with _cache_lock:
+        _response_cache[key] = (_now(), value)
+        _response_cache.move_to_end(key)
+        while len(_response_cache) > CACHE_MAX:
+            _response_cache.popitem(last=False)
 
 
 def strip_think_block(content: str) -> str:
@@ -341,13 +379,25 @@ def generate_chat_response(
 
     spec = AGENTS.get(agent_name)
 
+    # Skip cache if there's meaningful conversation history
+    if not history or len(history) <= 1:
+        cached = _cache_get(message, agent_name)
+        if cached is not None:
+            logger.info("Cache hit for [%s]: %s", agent_name, message[:60])
+            return cached
+
     if spec and spec.get("tools") and spec.get("run_tool"):
         client = get_client()
-        return _complete_with_tools(client, agent_name, message, history, spec)
+        result = _complete_with_tools(client, agent_name, message, history, spec)
+    else:
+        client = get_client()
+        result = _complete(client, agent_name, message, history, stream=False)
 
-    client = get_client()
+    # Cache responses without meaningful history
+    if not history or len(history) <= 1:
+        _cache_put(message, agent_name, result)
 
-    return _complete(client, agent_name, message, history, stream=False)
+    return result
 
 
 def stream_chat_response(
@@ -371,7 +421,36 @@ def stream_chat_response(
         except Exception as exc2:
             logger.exception("Non-stream fallback failed")
             yield f"data: {json.dumps({'error': str(exc2)})}\n\n"
-        yield "data: [DONE]\n\n"
+    yield "data: [DONE]\n\n"
+
+
+# ---------- warmup ----------
+def warmup():
+    """Prime the Groq connection and cache a common query.
+
+    Called from a background thread on startup so the first real user
+    request hits a warm connection and a populated cache.
+    """
+    try:
+        client = get_client()
+        for agent_name, spec in AGENTS.items():
+            if not spec.get("model"):
+                continue
+            try:
+                messages = build_messages("What products do you have?", agent_name)
+                response = client.chat.completions.create(
+                    model=spec["model"],
+                    messages=messages,
+                    temperature=0.1,
+                    max_tokens=256,
+                )
+                text = strip_think_block(response.choices[0].message.content or "")
+                _cache_put("what products do you have?", agent_name, text)
+                logger.info("Warmup done for %s", agent_name)
+            except Exception as exc:
+                logger.warning("Warmup failed for %s (non-fatal): %s", agent_name, exc)
+    except Exception as exc:
+        logger.warning("Warmup client init failed (non-fatal): %s", exc)
         return
 
     stripper = make_think_stripper()
