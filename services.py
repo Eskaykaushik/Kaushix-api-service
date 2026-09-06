@@ -141,11 +141,16 @@ def build_messages(
     agent_name: str,
     history: list[dict] | None = None,
     max_history: int = MAX_HISTORY_TURNS,
+    screen: dict | None = None,
 ) -> list[dict]:
 
     spec = AGENTS[agent_name]
 
     messages = [{"role": "system", "content": spec["prompt"]}]
+
+    screen_note = describe_screen(screen)
+    if screen_note:
+        messages.append({"role": "system", "content": screen_note})
 
     for turn in (history or [])[-max_history:]:
         role = turn.get("role") if isinstance(turn, dict) else turn.role
@@ -156,6 +161,36 @@ def build_messages(
     messages.append({"role": "user", "content": message})
 
     return messages
+
+
+def describe_screen(ui_state: dict | None) -> str:
+    """A short note describing what the user currently has on screen.
+
+    Lets the model resolve anaphora against the live UI ("make it red",
+    "only the liability changes") instead of guessing from context-free text.
+    """
+
+    if not ui_state:
+        return ""
+
+    parts: list[str] = []
+
+    intent = ui_state.get("intent") or {}
+    task = intent.get("task")
+    if task:
+        parts.append(f"screen task: {task}")
+
+    spec = ui_state.get("uiSpec") or {}
+    components = spec.get("components")
+    if isinstance(components, list):
+        kinds = [c.get("type") for c in components if isinstance(c, dict)]
+        if kinds:
+            parts.append("components: " + ", ".join(str(k) for k in kinds))
+
+    if not parts:
+        return ""
+
+    return "[on screen] " + "; ".join(parts) + "."
 
 
 def _is_context_error(exc: Exception) -> bool:
@@ -183,6 +218,7 @@ def _complete(
     *,
     stream: bool,
     retries: int = TRANSIENT_RETRIES,
+    screen: dict | None = None,
 ):
     """Run one agent request with transient retries, token-limit shrinking,
     and model fallback. Returns a stream object or a stripped string."""
@@ -202,7 +238,7 @@ def _complete(
         while True:
             attempt += 1
 
-            messages = build_messages(message, agent_name, history, history_window)
+            messages = build_messages(message, agent_name, history, history_window, screen)
 
             try:
                 response = client.chat.completions.create(
@@ -296,7 +332,7 @@ def _chat_with_retry(client, model, messages, temperature, max_tokens, tools=Non
     raise last_error or RuntimeError(f"Model {model} failed after {retries} retries")
 
 
-def _complete_with_tools(client, agent_name, message, history, spec):
+def _complete_with_tools(client, agent_name, message, history, spec, screen=None):
     """Run an agent that may invoke tools (e.g. add_to_cart, send_order_email).
 
     Returns a dict ``{"response": str, "tool_calls": list}`` where
@@ -309,7 +345,7 @@ def _complete_with_tools(client, agent_name, message, history, spec):
     run_tool = spec["run_tool"]
     models = [spec["model"]] + [AGENTS[name]["model"] for name in spec.get("fallbacks", [])]
 
-    messages = build_messages(message, agent_name, history)
+    messages = build_messages(message, agent_name, history, screen=screen)
 
     executed_tools: list[dict] = []
     last_error = None
@@ -375,6 +411,7 @@ def generate_chat_response(
     message: str,
     agent_name: str,
     history: list[dict] | None = None,
+    screen: dict | None = None,
 ) -> str | dict:
 
     spec = AGENTS.get(agent_name)
@@ -388,10 +425,10 @@ def generate_chat_response(
 
     if spec and spec.get("tools") and spec.get("run_tool"):
         client = get_client()
-        result = _complete_with_tools(client, agent_name, message, history, spec)
+        result = _complete_with_tools(client, agent_name, message, history, spec, screen)
     else:
         client = get_client()
-        result = _complete(client, agent_name, message, history, stream=False)
+        result = _complete(client, agent_name, message, history, stream=False, screen=screen)
 
     # Cache responses without meaningful history
     if not history or len(history) <= 1:
@@ -404,6 +441,7 @@ def stream_chat_response(
     message: str,
     agent_name: str,
     history: list[dict] | None = None,
+    screen: dict | None = None,
 ):
 
     client = get_client()
@@ -412,11 +450,11 @@ def stream_chat_response(
         return f"data: {json.dumps({'content': content})}\n\n"
 
     try:
-        stream = _complete(client, agent_name, message, history, stream=True)
+        stream = _complete(client, agent_name, message, history, stream=True, screen=screen)
     except Exception as exc:
         logger.exception("Streaming request failed, trying non-stream fallback")
         try:
-            content = _complete(client, agent_name, message, history, stream=False)
+            content = _complete(client, agent_name, message, history, stream=False, screen=screen)
             yield emit(content)
         except Exception as exc2:
             logger.exception("Non-stream fallback failed")
