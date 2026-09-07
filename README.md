@@ -155,6 +155,30 @@ tools are unaffected.
 
 Required env vars for this agent: `RESEND_API_KEY`, `SALES_TEAM_EMAIL`.
 
+## Maya edge-function copy (Supabase)
+
+`POST /api/maya` — the tool-enabled agent behind Maya — is also deployed as a
+public Supabase Edge Function (`verify_jwt=false`) as a resilience copy:
+
+- **URL:** `https://tysjdmvykwdxxyxnfzbd.supabase.co/functions/v1/maya`
+- **Parity:** mirrors `agents/maya.py` — same `qwen/qwen3.8-27b` model with
+  `openai/gpt-oss-20b` fallback, same tool schemas + tool loop (safe evaluator
+  with Python semantics), same prompt, `strip_think_block` and screen-note, and
+  the same 2-shape response (`ui_spec` | `tool_calls`/`response`).
+- **Source:** `supabase/functions/maya/` in this repo; the GitHub integration
+  auto-deploys on push to `main`.
+- **Frontend:** Maya's `config.js` keeps Render primary and falls back to this
+  function (then the HF Spaces copy) when the primary is unreachable.
+
+### Redeploy / rotate the Groq key (non-interactive CLI)
+
+```bash
+export SUPABASE_ACCESS_TOKEN="$(cat ../supabase-access-token.txt)"   # gitignored
+supabase link --project-ref tysjdmvykwdxxyxnfzbd
+supabase functions deploy maya --project-ref tysjdmvykwdxxyxnfzbd
+supabase secrets set GROQ_API_KEY='gsk_...'   # renew when rotated
+```
+
 ## Testing
 
 ```bash
