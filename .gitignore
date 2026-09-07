@@ -32,4 +32,8 @@ Thumbs.db
 # Local files
 *.local
 
+# Supabase deploy credentials (never committed)
+supabase-access-token.txt
+supabase-creds.env
+
 tests/
